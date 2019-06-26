@@ -1,0 +1,27 @@
+<launch>
+  <param name="/use_sim_time" value="true" />
+  <rosparam file="$(find lego_lol)/params/global.yaml" command="load" />
+
+  <!-- <node pkg="nodelet" type="nodelet" name="lego_manager" args="manager" output="screen" />
+  <node pkg="nodelet" type="nodelet" name="ImageProjection" args="load loam/ImageProjection lego_manager" output="log" />
+  <node pkg="nodelet" type="nodelet" name="LaserOdometry" args="load loam/LaserOdometry lego_manager" output="log" /> -->
+
+  <node pkg="tf" type="static_transform_publisher" name="base2laser" args="0 0 0 0 0 0 1 base_link laser 100" />
+
+  <node pkg="alego" type="IP" name="IP" />
+
+  <node pkg="alego" type="LO" name="LO" output="log">
+  </node>
+
+  <node pkg="lego_lol" type="lol" name="lol" output="log">
+    <remap from="/corner" to="/corner_less" />
+    <remap from="/surf" to="/surf_less" />
+    <!-- <remap from="/outlier" to="/laser_cloud_outlier" /> -->
+    <remap from="/odom" to="/odom/lidar" />
+    <rosparam file="$(find lego_lol)/params/test.yaml" command="load" />
+    <param name="fn_poses" value="$(find bag_file)/pcd/keypose.pcd" />
+    <param name="fn_corner" value="$(find bag_file)/pcd/corner.pcd" />
+    <param name="fn_surf" value="$(find bag_file)/pcd/surf.pcd" />
+    <param name="fn_outlier" value="$(find bag_file)/pcd/outlier.pcd" />
+  </node>
+</launch>

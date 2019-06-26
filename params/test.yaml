@@ -1,0 +1,8 @@
+surround_search_radius: 30.0
+surround_search_num: 50
+corner_leaf: 0.2
+surf_leaf: 0.4
+outlier_leaf: 0.4
+surround_keyposes_leaf: 0.3
+target_update_dist: 5.
+batch_size: 5

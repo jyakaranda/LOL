@@ -8,14 +8,14 @@
  * @copyright Copyright (c) 2019
  * 
  */
-#include "lego_lol/lolLocalization.h"
+#include "lol/lolLocalization.h"
 
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "lol");
   ros::NodeHandle nh, pnh("~");
 
-  localization::LolLocalization *lol = new localization::LolLocalization(std::shared_ptr<ros::NodeHandle>(&nh), std::shared_ptr<ros::NodeHandle>(&pnh));
+  localization::LolLocalization *lol = new localization::LolLocalization(nh, pnh);
   std::thread opt_thread(&localization::LolLocalization::optimizeThread, lol);
   lol->run();
 

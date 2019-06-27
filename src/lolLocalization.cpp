@@ -9,40 +9,33 @@
  * 
  */
 
-#include "lego_lol/lolLocalization.h"
+#include "lol/lolLocalization.h"
 
 namespace localization
 {
-LolLocalization::LolLocalization(std::shared_ptr<ros::NodeHandle> nh, std::shared_ptr<ros::NodeHandle> pnh) : nh_(nh), pnh_(pnh)
+LolLocalization::LolLocalization(ros::NodeHandle nh, ros::NodeHandle pnh) : nh_(nh), pnh_(pnh)
 {
 
-  pnh_->param<float>("surround_search_radius", surround_search_radius_, 50.0);
-  pnh_->param<int>("surround_search_num", surround_search_num_, 50);
-  pnh_->param<float>("corner_leaf", corner_leaf_, 0.2);
-  pnh_->param<float>("surf_leaf", surf_leaf_, 0.5);
-  pnh_->param<float>("outlier_leaf", outlier_leaf_, 0.5);
-  pnh_->param<float>("surround_keyposes_leaf", surround_keyposes_leaf_, 1.0);
-  pnh_->param<std::string>("fn_poses", fn_poses_, std::string("~"));
-  pnh_->param<std::string>("fn_corner", fn_corner_, std::string("~"));
-  pnh_->param<std::string>("fn_surf", fn_surf_, std::string("~"));
-  pnh_->param<std::string>("fn_outlier", fn_outlier_, std::string("~"));
-  pnh_->param<float>("target_update_dist", target_update_dist_, 5.);
-  pnh_->param<int>("batch_size", batch_size_, 5);
+  pnh_.param<double>("surround_search_radius", surround_search_radius_, 50.0);
+  pnh_.param<int>("surround_search_num", surround_search_num_, 50);
+  pnh_.param<double>("corner_leaf", corner_leaf_, 0.2);
+  pnh_.param<double>("surf_leaf", surf_leaf_, 0.5);
+  pnh_.param<double>("outlier_leaf", outlier_leaf_, 0.5);
+  pnh_.param<double>("surround_keyposes_leaf", surround_keyposes_leaf_, 1.0);
+  pnh_.param<std::string>("fn_poses", fn_poses_, std::string("~"));
+  pnh_.param<std::string>("fn_corner", fn_corner_, std::string("~"));
+  pnh_.param<std::string>("fn_surf", fn_surf_, std::string("~"));
+  pnh_.param<std::string>("fn_outlier", fn_outlier_, std::string("~"));
+  pnh_.param<double>("target_update_dist", target_update_dist_, 5.);
+  pnh_.param<int>("batch_size", batch_size_, 5);
+  pnh_.param<double>("huber_s", huber_s_, 0.2);
+  pnh_.param<int>("max_iters", max_iters_, 10);
+  pnh_.param<double>("func_tolerance", func_tolerance_, 1e-6);
+  pnh_.param<double>("gradient_tolerance", gradient_tolerance_, 1e-10);
+  pnh_.param<double>("param_tolerance", param_tolerance_, 1e-8);
 
-  batch_cnt_ = 0;
-  local_corner_.reset(new PointCloudT);
-  local_surf_.reset(new PointCloudT);
-  local_outlier_.reset(new PointCloudT);
-
-  tf_o2l_0_ = Eigen::Matrix4d::Identity();
-  tf_m2l_0_ = Eigen::Matrix4d::Identity();
-
-  tf_m2o_ = Eigen::Matrix4d::Identity();
-  tf_o2b_ = Eigen::Matrix4d::Identity();
-  tf_b2l_ = Eigen::Matrix4d::Identity();
-  tf_m2o_update_ = Eigen::Matrix4d::Identity();
-  float roll, pitch, yaw;
-  if (!nh_->getParam("tf_b2l_x", tf_b2l_(0, 3)) || !nh_->getParam("tf_b2l_y", tf_b2l_(1, 3)) || !nh_->getParam("tf_b2l_z", tf_b2l_(2, 3)) || !nh_->getParam("tf_b2l_roll", roll) || !nh_->getParam("tf_b2l_pitch", pitch) || !nh_->getParam("tf_b2l_yaw", yaw))
+  double roll, pitch, yaw;
+  if (!nh_.getParam("tf_b2l_x", tf_b2l_(0, 3)) || !nh_.getParam("tf_b2l_y", tf_b2l_(1, 3)) || !nh_.getParam("tf_b2l_z", tf_b2l_(2, 3)) || !nh_.getParam("tf_b2l_roll", roll) || !nh_.getParam("tf_b2l_pitch", pitch) || !nh_.getParam("tf_b2l_yaw", yaw))
   {
     ROS_ERROR("transform between /base_link to /laser not set.");
     exit(-1);
@@ -58,25 +51,23 @@ LolLocalization::LolLocalization(std::shared_ptr<ros::NodeHandle> nh, std::share
     exit(-1);
   }
 
-  lol_ = std::shared_ptr<LolLocalization>(this);
+  pub_lol_pose_ = nh_.advertise<geometry_msgs::PoseStamped>("/current_pose", 1);
+  pub_corner_target_ = nh_.advertise<sensor_msgs::PointCloud2>("/corner_target", 1);
+  pub_surf_target_ = nh_.advertise<sensor_msgs::PointCloud2>("/surf_target", 1);
+  pub_corner_source_ = nh_.advertise<sensor_msgs::PointCloud2>("/corner_source", 1);
+  pub_surf_source_ = nh_.advertise<sensor_msgs::PointCloud2>("/surf_source", 1);
+  pub_test_ = nh_.advertise<sensor_msgs::PointCloud2>("/test_pc", 1);
 
-  pub_lol_pose_ = nh_->advertise<geometry_msgs::PoseStamped>("/current_pose", 5);
-  pub_corner_target_ = nh_->advertise<sensor_msgs::PointCloud2>("/corner_target", 1);
-  pub_surf_target_ = nh_->advertise<sensor_msgs::PointCloud2>("/surf_target", 1);
-  pub_corner_source_ = nh_->advertise<sensor_msgs::PointCloud2>("/corner_source", 1);
-  pub_surf_source_ = nh_->advertise<sensor_msgs::PointCloud2>("/surf_source", 1);
-  pub_test_ = nh_->advertise<sensor_msgs::PointCloud2>("/test_pc", 1);
-
-  sub_odom_ = nh_->subscribe<nav_msgs::Odometry>("/odom/lidar", 40, boost::bind(&LolLocalization::odomCB, this, _1));
-  sub_corner_ = nh_->subscribe<sensor_msgs::PointCloud2>("/corner", 1, boost::bind(&LolLocalization::cornerCB, this, _1));
-  sub_surf_ = nh_->subscribe<sensor_msgs::PointCloud2>("/surf", 1, boost::bind(&LolLocalization::surfCB, this, _1));
-  sub_outlier_ = nh_->subscribe<sensor_msgs::PointCloud2>("/outlier", 1, boost::bind(&LolLocalization::outlierCB, this, _1));
-  sub_initial_pose_ = nh_->subscribe<geometry_msgs::PoseWithCovarianceStamped>("/initialpose", 1, boost::bind(&LolLocalization::initialPoseCB, this, _1));
+  sub_odom_ = nh_.subscribe<nav_msgs::Odometry>("/odom/lidar", 40, boost::bind(&LolLocalization::odomCB, this, _1));
+  sub_corner_ = nh_.subscribe<sensor_msgs::PointCloud2>("/corner", 10, boost::bind(&LolLocalization::cornerCB, this, _1));
+  sub_surf_ = nh_.subscribe<sensor_msgs::PointCloud2>("/surf", 10, boost::bind(&LolLocalization::surfCB, this, _1));
+  sub_outlier_ = nh_.subscribe<sensor_msgs::PointCloud2>("/outlier", 10, boost::bind(&LolLocalization::outlierCB, this, _1));
+  sub_initial_pose_ = nh_.subscribe<geometry_msgs::PoseWithCovarianceStamped>("/initialpose", 1, boost::bind(&LolLocalization::initialPoseCB, this, _1));
 }
 
 bool LolLocalization::init()
 {
-
+  TicToc t_init;
   keyposes_3d_.reset(new pcl::PointCloud<PointType>());
 
   laser_corner_.reset(new pcl::PointCloud<PointType>());
@@ -89,8 +80,6 @@ bool LolLocalization::init()
   pc_surf_target_.reset(new pcl::PointCloud<PointType>());
   pc_corner_target_ds_.reset(new pcl::PointCloud<PointType>());
   pc_surf_target_ds_.reset(new pcl::PointCloud<PointType>());
-  target_center_.x = target_center_.y = target_center_.z = -100.;
-  pc_surround_keyposes_.reset(new pcl::PointCloud<PointType>());
 
   kdtree_keyposes_3d_.reset(new pcl::KdTreeFLANN<PointType>());
   kdtree_corner_target_.reset(new pcl::KdTreeFLANN<PointType>());
@@ -101,6 +90,7 @@ bool LolLocalization::init()
   ds_outlier_.setLeafSize(outlier_leaf_, outlier_leaf_, outlier_leaf_);
   ds_surround_keyposes_.setLeafSize(surround_keyposes_leaf_, surround_keyposes_leaf_, surround_keyposes_leaf_);
 
+  target_center_.x = target_center_.y = target_center_.z = -100.;
   cur_laser_pose_ = geometry_msgs::PoseStamped();
   pre_laser_pose_ = geometry_msgs::PoseStamped();
 
@@ -147,43 +137,44 @@ bool LolLocalization::init()
     outlier_keyframes_[int(p.intensity)]->points.push_back(p);
   }
 
-  time_laser_corner_ = 0.;
-  time_laser_surf_ = 0.;
-  time_laser_outlier_ = 0.;
-  new_laser_corner_ = false;
-  new_laser_surf_ = false;
-  new_laser_outlier_ = false;
-  new_laser_odom_ = false;
+  time_laser_corner_ = time_laser_surf_ = time_laser_outlier_ = time_laser_odom_ = 0.;
+  new_laser_corner_ = new_laser_surf_ = new_laser_outlier_ = new_laser_odom_ = false;
 
-  odom_front_ = 0;
-  odom_last_ = 0;
+  batch_cnt_ = 0;
+  local_corner_.reset(new PointCloudT);
+  local_surf_.reset(new PointCloudT);
+  local_outlier_.reset(new PointCloudT);
+
+  tf_o2l_0_ = Eigen::Matrix4d::Identity();
+  tf_m2l_0_ = Eigen::Matrix4d::Identity();
+
+  tf_m2o_ = Eigen::Matrix4d::Identity();
+  tf_o2b_ = Eigen::Matrix4d::Identity();
+  tf_b2l_ = Eigen::Matrix4d::Identity();
+  tf_m2o_update_ = Eigen::Matrix4d::Identity();
 
   for (int i = 0; i < 6; ++i)
   {
     tobe_optimized_[i] = 0;
   }
-  // options_.minimizer_progress_to_stdout = true;
-  options_.linear_solver_type = ceres::DENSE_QR;
-  options_.max_num_iterations = 20;
-  // options_.initial_trust_region_radius = 1e2;
-  // options_.max_trust_region_radius = 1e6;
-  // options_.min_trust_region_radius = 1e-10;
-  options_.gradient_check_relative_precision = 1e-4;
-  options_.callbacks.push_back(new IterCB(lol_));
-  options_.update_state_every_iteration = true;
 
-  ROS_INFO("init ok.");
+  ROS_INFO("init ok. time: %.3fms", t_init.toc());
 
   return true;
 }
 
 void LolLocalization::odomCB(const nav_msgs::OdometryConstPtr &msg)
 {
+  // update
   tf_o2b_.block<3, 3>(0, 0) = Eigen::Quaterniond(msg->pose.pose.orientation.w, msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z).toRotationMatrix();
   tf_o2b_(0, 3) = msg->pose.pose.position.x;
   tf_o2b_(1, 3) = msg->pose.pose.position.y;
   tf_o2b_(2, 3) = msg->pose.pose.position.z;
 
+  time_laser_odom_ = msg->header.stamp.toSec();
+  new_laser_odom_ = true;
+
+  // publish
   Eigen::Quaterniond tmp_q(tf_m2o_.block<3, 3>(0, 0));
   tf::StampedTransform m2o;
   m2o.setRotation(tf::Quaternion(tmp_q.x(), tmp_q.y(), tmp_q.z(), tmp_q.w()));
@@ -193,8 +184,19 @@ void LolLocalization::odomCB(const nav_msgs::OdometryConstPtr &msg)
   m2o.child_frame_id_ = "/odom";
   tf_broadcaster_.sendTransform(m2o);
 
-  time_laser_odom_ = msg->header.stamp.toSec();
-  new_laser_odom_ = true;
+  Eigen::Matrix4d m2b = tf_m2o_ * tf_o2b_;
+  tmp_q = m2b.block<3, 3>(0, 0);
+  geometry_msgs::PoseStamped msg_pose;
+  msg_pose.header.frame_id = "/map";
+  msg_pose.header.stamp = msg->header.stamp;
+  msg_pose.pose.orientation.w = tmp_q.w();
+  msg_pose.pose.orientation.x = tmp_q.x();
+  msg_pose.pose.orientation.y = tmp_q.y();
+  msg_pose.pose.orientation.z = tmp_q.z();
+  msg_pose.pose.position.x = m2b(0, 3);
+  msg_pose.pose.position.y = m2b(1, 3);
+  msg_pose.pose.position.z = m2b(2, 3);
+  pub_lol_pose_.publish(msg_pose);
 }
 
 void LolLocalization::cornerCB(const sensor_msgs::PointCloud2ConstPtr &msg)
@@ -221,6 +223,7 @@ void LolLocalization::outlierCB(const sensor_msgs::PointCloud2ConstPtr &msg)
 
 void LolLocalization::initialPoseCB(const geometry_msgs::PoseWithCovarianceStampedConstPtr &msg)
 {
+  mtx_.lock();
   PointType p;
   p.x = msg->pose.pose.position.x;
   p.y = msg->pose.pose.position.y;
@@ -228,24 +231,30 @@ void LolLocalization::initialPoseCB(const geometry_msgs::PoseWithCovarianceStamp
   pre_laser_pose_.pose = cur_laser_pose_.pose = msg->pose.pose;
   pre_laser_pose_.header = cur_laser_pose_.header = msg->header;
   extractSurroundKeyFrames(p);
+
   Eigen::Matrix4d m2b(Eigen::Matrix4d::Identity());
   m2b.block<3, 3>(0, 0) = Eigen::Quaterniond(msg->pose.pose.orientation.w, msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z).toRotationMatrix();
   m2b(0, 3) = msg->pose.pose.position.x;
   m2b(1, 3) = msg->pose.pose.position.y;
   m2b(2, 3) = msg->pose.pose.position.z;
   tf_m2o_ = m2b * tf_o2b_.inverse();
+  tf_m2o_update_ = tf_m2o_;
+
+  tf_m2l_0_ = m2b * tf_b2l_;
+
   batch_cnt_ = 0;
+  mtx_.unlock();
   ROS_WARN("init pose set.");
 }
 
-void LolLocalization::extractSurroundKeyFrames(const PointType &p)
+bool LolLocalization::extractSurroundKeyFrames(const PointType &p)
 {
   ROS_INFO("extract surround keyframes");
   TicToc t_extract;
-  // pc_surround_keyposes_->clear();
+
   pcl::PointCloud<PointType>::Ptr tmp_keyposes(new pcl::PointCloud<PointType>());
   pcl::PointCloud<PointType>::Ptr tmp_keyposes_ds(new pcl::PointCloud<PointType>());
-  kdtree_keyposes_3d_->radiusSearch(p, double(surround_search_radius_), point_search_idx_, point_search_dist_, 0);
+  kdtree_keyposes_3d_->radiusSearch(p, surround_search_radius_, point_search_idx_, point_search_dist_, 0);
   for (int i = 0; i < point_search_idx_.size(); ++i)
   {
     tmp_keyposes->points.push_back(keyposes_3d_->points[point_search_idx_[i]]);
@@ -317,19 +326,34 @@ void LolLocalization::extractSurroundKeyFrames(const PointType &p)
   ds_surf_.setInputCloud(pc_surf_target_);
   ds_surf_.filter(*pc_surf_target_ds_);
 
-  sensor_msgs::PointCloud2 msg_corner_target, msg_surf_target;
-  pcl::toROSMsg(*pc_corner_target_ds_, msg_corner_target);
-  pcl::toROSMsg(*pc_surf_target_ds_, msg_surf_target);
-  msg_corner_target.header.stamp = ros::Time::now();
-  msg_corner_target.header.frame_id = "map";
-  msg_surf_target.header = msg_corner_target.header;
-  pub_corner_target_.publish(msg_corner_target);
-  pub_surf_target_.publish(msg_surf_target);
+  if (pub_surf_target_.getNumSubscribers() > 0 || pub_corner_target_.getNumSubscribers() > 0)
+  {
+    sensor_msgs::PointCloud2 msg_corner_target, msg_surf_target;
+    pcl::toROSMsg(*pc_corner_target_ds_, msg_corner_target);
+    pcl::toROSMsg(*pc_surf_target_ds_, msg_surf_target);
+    msg_corner_target.header.stamp = ros::Time::now();
+    msg_corner_target.header.frame_id = "map";
+    msg_surf_target.header = msg_corner_target.header;
+    pub_corner_target_.publish(msg_corner_target);
+    pub_surf_target_.publish(msg_surf_target);
+  }
 
   target_center_.x = p.x;
   target_center_.y = p.y;
 
+  if (0 == pc_corner_target_ds_->size() || 0 == pc_surf_target_ds_->size())
+  {
+    ROS_WARN("empty corner or surf target, reset robot pose");
+    return false;
+  }
+
+  TicToc t_kd;
+  kdtree_corner_target_->setInputCloud(pc_corner_target_ds_);
+  kdtree_surf_target_->setInputCloud(pc_surf_target_ds_);
+  ROS_INFO("kd prepare time: %.3fms, batch_cnt_: %d", t_kd.toc(), batch_cnt_);
+
   ROS_INFO("time: %.3fms, pc_corner_target_ds_: %d, pc_surf_target_ds_: %d", t_extract.toc(), pc_corner_target_ds_->points.size(), pc_surf_target_ds_->points.size());
+  return true;
 }
 
 void LolLocalization::run()
@@ -354,16 +378,20 @@ void LolLocalization::run()
           tf_m2l = tf_m2o_update_ * tf_m2o_.inverse() * tf_m2l;
           tf_m2o_ = tf_m2o_update_;
         }
-        sensor_msgs::PointCloud2 test1;
-        pcl::toROSMsg(*test_pc, test1);
-        test1.header.stamp = ros::Time::now();
-        test1.header.frame_id = "map";
-        pub_test_.publish(test1);
+        // save t0 laser pose as tobe_optimized target
         tf_m2l_0_ = tf_m2l;
         tf_o2l_0_ = tf_o2b_ * tf_b2l_;
-        test_pc->clear();
+
+        if (pub_test_.getNumSubscribers() > 0)
+        {
+          sensor_msgs::PointCloud2 test1;
+          pcl::toROSMsg(*test_pc, test1);
+          test1.header.stamp = ros::Time::now();
+          test1.header.frame_id = "map";
+          pub_test_.publish(test1);
+          test_pc->clear();
+        }
       }
-      ++batch_cnt_;
       // transform feature points to t0 frame
       PointCloudT::Ptr tf_corner(new PointCloudT);
       PointCloudT::Ptr tf_surf(new PointCloudT);
@@ -371,11 +399,15 @@ void LolLocalization::run()
       pcl::transformPointCloud<PointT, double>(*laser_corner_, *tf_corner, tf_m2l);
       pcl::transformPointCloud<PointT, double>(*laser_surf_, *tf_surf, tf_m2l);
       pcl::transformPointCloud<PointT, double>(*laser_outlier_, *tf_outlier, tf_m2l);
-      PointCloudT::Ptr tmp(new PointCloudT);
-      pcl::transformPointCloud<PointT, double>(*laser_surf_, *tmp, tf_m2l);
-      *test_pc += *tmp;
+      if (pub_test_.getNumSubscribers() > 0)
+      {
+        PointCloudT::Ptr tmp(new PointCloudT);
+        pcl::transformPointCloud<PointT, double>(*laser_surf_, *tmp, tf_m2l);
+        *test_pc += *tmp;
+      }
 
       mtx_.lock();
+      ++batch_cnt_;
       *local_corner_ += *tf_corner;
       *local_surf_ += *tf_surf;
       // *local_outlier_ += *tf_outlier;
@@ -396,6 +428,7 @@ void LolLocalization::optimizeThread()
     duration.sleep();
     ros::spinOnce();
 
+    TicToc t_all;
     mtx_.lock();
     if (batch_cnt_ < batch_size_)
     {
@@ -422,20 +455,26 @@ void LolLocalization::optimizeThread()
 
     mtx_.unlock();
 
-    sensor_msgs::PointCloud2 corner_source, surf_source;
+    // transform back to t0 local frame, maybe can be optimized
     PointCloudT::Ptr tmp_corner(new PointCloudT);
     PointCloudT::Ptr tmp_surf(new PointCloudT);
     pcl::transformPointCloud<PointT, double>(*corner_ds, *tmp_corner, m2l_0_backup.inverse());
     pcl::transformPointCloud<PointT, double>(*surf_ds, *tmp_surf, m2l_0_backup.inverse());
-    pcl::toROSMsg(*tmp_corner, corner_source);
-    pcl::toROSMsg(*tmp_surf, surf_source);
-    corner_source.header.stamp = ros::Time::now();
-    corner_source.header.frame_id = "/laser";
-    surf_source.header = corner_source.header;
-    pub_corner_source_.publish(corner_source);
-    pub_surf_source_.publish(surf_source);
     corner_ds = tmp_corner;
     surf_ds = tmp_surf;
+
+    if (pub_surf_source_.getNumSubscribers() > 0 || pub_corner_source_.getNumSubscribers() > 0)
+    {
+      sensor_msgs::PointCloud2 corner_source, surf_source;
+
+      pcl::toROSMsg(*tmp_corner, corner_source);
+      pcl::toROSMsg(*tmp_surf, surf_source);
+      corner_source.header.stamp = ros::Time::now();
+      corner_source.header.frame_id = "/laser";
+      surf_source.header = corner_source.header;
+      pub_corner_source_.publish(corner_source);
+      pub_surf_source_.publish(surf_source);
+    }
 
     Eigen::Quaterniond q_m2l(m2l_0_backup.block<3, 3>(0, 0));
     tf::Matrix3x3(tf::Quaternion(q_m2l.x(), q_m2l.y(), q_m2l.z(), q_m2l.w())).getEulerYPR(tobe_optimized_[5], tobe_optimized_[4], tobe_optimized_[3]);
@@ -451,26 +490,27 @@ void LolLocalization::optimizeThread()
     // 目前就只看水平的偏移
     if (hypot(cur_pose.x - target_center_.x, cur_pose.y - target_center_.y) > target_update_dist_)
     {
-      extractSurroundKeyFrames(cur_pose);
-
-      if (0 == pc_corner_target_ds_->size() || 0 == pc_surf_target_ds_->size())
+      if (false == extractSurroundKeyFrames(cur_pose))
       {
-        ROS_WARN("empty corner or surf target, reset robot pose");
+        ROS_WARN("failed extract surround keyframes");
         continue;
       }
-
-      TicToc t_kd;
-      kdtree_corner_target_->setInputCloud(pc_corner_target_ds_);
-      kdtree_surf_target_->setInputCloud(pc_surf_target_ds_);
-      ROS_INFO("kd prepare time: %.3fms, batch_cnt_: %d", t_kd.toc(), batch_cnt_);
     }
 
     // scan matching refinement
     for (int iter_cnt = 0; iter_cnt < 4; ++iter_cnt)
     {
-      TicToc t_data;
-      ceres::LossFunction *loss_function = new ceres::HuberLoss(0.2);
+      TicToc t_data, t_opt;
       ceres::Problem problem;
+      ceres::LossFunction *loss_function = new ceres::HuberLoss(huber_s_);
+      ceres::Solver::Options options;
+      options.linear_solver_type = ceres::DENSE_QR;
+      options.max_num_iterations = max_iters_;
+      options.minimizer_progress_to_stdout = false;
+      options.check_gradients = false;
+      options.function_tolerance = func_tolerance_;
+      options.gradient_tolerance = gradient_tolerance_;
+      options.parameter_tolerance = param_tolerance_;
       problem.AddParameterBlock(tobe_optimized_, 6);
 
       int corner_correspondance = 0, surf_correspondance = 0;
@@ -479,10 +519,10 @@ void LolLocalization::optimizeThread()
       m_tobe(0, 3) = tobe_optimized_[0];
       m_tobe(1, 3) = tobe_optimized_[1];
       m_tobe(2, 3) = tobe_optimized_[2];
+      Eigen::Affine3d a_tobe(m_tobe);
       for (int i = 0; i < corner_ds->size(); ++i)
       {
-        PointT point_sel = pcl::transformPoint<PointT, double>(corner_ds->points[i], Eigen::Affine3d(m_tobe));
-        // pointAssociateToMap(corner_ds->points[i], point_sel);
+        PointT point_sel = pcl::transformPoint<PointT, double>(corner_ds->points[i], a_tobe);
         kdtree_corner_target_->nearestKSearch(point_sel, 5, point_search_idx_, point_search_dist_);
         if (point_search_dist_[4] < 1.0)
         {
@@ -516,7 +556,7 @@ void LolLocalization::optimizeThread()
 
       for (int i = 0; i < surf_ds->size(); ++i)
       {
-        PointT point_sel = pcl::transformPoint<PointT, double>(surf_ds->points[i], Eigen::Affine3d(m_tobe));
+        PointT point_sel = pcl::transformPoint<PointT, double>(surf_ds->points[i], a_tobe);
         kdtree_surf_target_->nearestKSearch(point_sel, 5, point_search_idx_, point_search_dist_);
         if (point_search_dist_[4] < 1.0)
         {
@@ -556,13 +596,7 @@ void LolLocalization::optimizeThread()
       ROS_INFO("corner correspondance: %d, surf correspondance: %d", corner_correspondance, surf_correspondance);
 
       TicToc t_solver;
-      ceres::Solver::Options options;
-      options.linear_solver_type = ceres::DENSE_QR;
-      options.max_num_iterations = 10;
-      options.minimizer_progress_to_stdout = false;
-      options.check_gradients = false;
-      options.gradient_check_numeric_derivative_relative_step_size = 1e-8;
-      options.gradient_check_relative_precision = 1e-5;
+
       ceres::Solver::Summary summary;
       ceres::Solve(options, &problem, &summary);
       ROS_INFO("localization solver time: %.3fms", t_solver.toc());
@@ -573,45 +607,13 @@ void LolLocalization::optimizeThread()
       m2l_0_backup(0, 3) = tobe_optimized_[0];
       m2l_0_backup(1, 3) = tobe_optimized_[1];
       m2l_0_backup(2, 3) = tobe_optimized_[2];
-      std::cout << tf_m2o_ << std::endl;
+
       tf_m2o_update_ = m2l_0_backup * o2l_o_backup.inverse();
-      std::cout << tf_m2o_update_ << std::endl;
-      std::cout << "iter: " << iter_cnt << " tf_m2l rpy: " << tobe_optimized_[3] << ", " << tobe_optimized_[4] << ", " << tobe_optimized_[5] << "; xyz: " << tobe_optimized_[0] << ", " << tobe_optimized_[1] << ", " << tobe_optimized_[2] << std::endl;
+       std::cout << "iter: " << iter_cnt << " opt time: " << t_opt.toc() <<"ms" << std::endl;
     }
-  }
-}
 
-CallbackReturnType LolLocalization::IterCB::operator()(const IterationSummary &summary)
-{
-
-  ROS_INFO("iteration cb, effect_residuals %d", lol_->effect_residuals_);
-  lol_->effect_residuals_ = 0;
-  lol_->R_tobe_ = Eigen::AngleAxisd(lol_->tobe_optimized_[5], Eigen::Vector3d::UnitZ()) * Eigen::AngleAxisd(lol_->tobe_optimized_[4], Eigen::Vector3d::UnitY()) * Eigen::AngleAxisd(lol_->tobe_optimized_[3], Eigen::Vector3d::UnitX());
-  lol_->T_tobe_ = Eigen::Vector3d(lol_->tobe_optimized_[0], lol_->tobe_optimized_[1], lol_->tobe_optimized_[2]);
-  static Eigen::Vector3d pre_r, pre_t;
-  if (summary.iteration == 0)
-  {
-    pre_r = Eigen::Vector3d(lol_->tobe_optimized_[3], lol_->tobe_optimized_[4], lol_->tobe_optimized_[5]);
-    pre_t = Eigen::Vector3d(lol_->tobe_optimized_[0], lol_->tobe_optimized_[1], lol_->tobe_optimized_[2]);
+    ROS_INFO("overall optimize time: %.3fms", t_all.toc());
   }
-  else
-  {
-    float delta_r = std::sqrt(std::pow(pcl::rad2deg(lol_->tobe_optimized_[3] - pre_r(0)), 2) +
-                              std::pow(lol_->tobe_optimized_[4] - pre_r(1), 2) +
-                              std::pow(lol_->tobe_optimized_[5] - pre_r(2), 2));
-    float delta_t = std::sqrt(std::pow(pcl::rad2deg(lol_->tobe_optimized_[0] - pre_t(0)), 2) +
-                              std::pow(lol_->tobe_optimized_[1] - pre_t(1), 2) +
-                              std::pow(lol_->tobe_optimized_[2] - pre_t(2), 2));
-    // 变化较小，提前终止迭代
-    if (delta_r < 0.05 && delta_t < 0.05)
-    {
-      return SOLVER_TERMINATE_SUCCESSFULLY;
-    }
-    pre_r = Eigen::Vector3d(lol_->tobe_optimized_[3], lol_->tobe_optimized_[4], lol_->tobe_optimized_[5]);
-    pre_t = Eigen::Vector3d(lol_->tobe_optimized_[0], lol_->tobe_optimized_[1], lol_->tobe_optimized_[2]);
-  }
-
-  return SOLVER_CONTINUE;
 }
 
 } // namespace localization

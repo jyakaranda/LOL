@@ -56,7 +56,7 @@ using namespace ceres;
 class LolLocalization
 {
 public:
-  LolLocalization(std::shared_ptr<ros::NodeHandle> nh, std::shared_ptr<ros::NodeHandle> pnh);
+  LolLocalization(ros::NodeHandle nh, ros::NodeHandle pnh);
   ~LolLocalization() {}
   LolLocalization(const LolLocalization &l) = delete;
 
@@ -68,19 +68,8 @@ private:
   // 点云地图中 intensity 为 keypose 的 id
   using PointType = pcl::PointXYZI;
 
-  class IterCB : public IterationCallback
-  {
-  public:
-    IterCB(std::shared_ptr<LolLocalization> lol) : lol_(lol) {}
-    virtual CallbackReturnType operator()(const IterationSummary &summary) override;
-
-  private:
-    std::shared_ptr<LolLocalization> lol_;
-  };
-
-  std::shared_ptr<ros::NodeHandle> nh_;
-  std::shared_ptr<ros::NodeHandle> pnh_;
-  std::shared_ptr<LolLocalization> lol_;
+  ros::NodeHandle nh_;
+  ros::NodeHandle pnh_;
 
   ros::Subscriber sub_odom_;
   ros::Subscriber sub_corner_;
@@ -96,16 +85,8 @@ private:
   ros::Publisher pub_test_;
   tf::TransformBroadcaster tf_broadcaster_;
 
-  ceres::Problem problem_;
-  ceres::Solver::Options options_;
-  ceres::Solver::Summary summary_;
   double tobe_optimized_[6];
-  Eigen::Matrix3d R_tobe_;
-  Eigen::Vector3d T_tobe_;
 
-  // std::deque<nav_msgs::Odometry> msg_odoms_;
-  std::array<nav_msgs::Odometry, 50> msg_odoms_;
-  int odom_front_, odom_last_;
   pcl::PointCloud<PointType>::Ptr laser_corner_;
   pcl::PointCloud<PointType>::Ptr laser_surf_;
   pcl::PointCloud<PointType>::Ptr laser_outlier_;
@@ -132,7 +113,6 @@ private:
   std::vector<pcl::PointCloud<PointType>::Ptr> surround_corner_keyframes_;
   std::vector<pcl::PointCloud<PointType>::Ptr> surround_surf_keyframes_;
   std::vector<pcl::PointCloud<PointType>::Ptr> surround_outlier_keyframes_;
-  pcl::PointCloud<PointType>::Ptr pc_surround_keyposes_;
   int batch_cnt_;
   PointCloudT::Ptr local_corner_;
   PointCloudT::Ptr local_surf_;
@@ -149,7 +129,7 @@ private:
   pcl::KdTreeFLANN<PointType>::Ptr kdtree_corner_target_;
   pcl::KdTreeFLANN<PointType>::Ptr kdtree_surf_target_;
   // params
-  float surround_search_radius_;
+  double surround_search_radius_;
   int surround_search_num_;
 
   // voxel filter
@@ -159,10 +139,16 @@ private:
   pcl::VoxelGrid<PointType> ds_surround_keyposes_;
 
   // params
-  float corner_leaf_, surf_leaf_, outlier_leaf_, surround_keyposes_leaf_;
+  double corner_leaf_, surf_leaf_, outlier_leaf_, surround_keyposes_leaf_;
   std::string fn_poses_, fn_corner_, fn_surf_, fn_outlier_;
-  float target_update_dist_; // 与 target_center_ 偏移 target_update_dist_ 以上时更新局部 target map
+  double target_update_dist_; // 与 target_center_ 偏移 target_update_dist_ 以上时更新局部 target map
   int batch_size_;
+
+  double huber_s_;
+  int max_iters_;
+  double func_tolerance_;
+  double gradient_tolerance_;
+  double param_tolerance_;
 
   geometry_msgs::PoseStamped cur_laser_pose_, pre_laser_pose_;
   std::deque<geometry_msgs::PoseStamped> history_poses_;
@@ -172,8 +158,6 @@ private:
   Eigen::Matrix4d tf_m2o_update_;
 
   std::mutex mtx_;
-
-  int effect_residuals_;
 
   void odomCB(const nav_msgs::OdometryConstPtr &msg);
   void cornerCB(const sensor_msgs::PointCloud2ConstPtr &msg);
@@ -194,16 +178,7 @@ private:
    * 
    * @param p 
    */
-  void extractSurroundKeyFrames(const PointType &p);
-
-  void pointAssociateToMap(const PointType &p_in, PointType &p_out)
-  {
-    const Eigen::Vector3d out = R_tobe_ * Eigen::Vector3d(p_in.x, p_in.y, p_in.z) + T_tobe_;
-    p_out.x = out.x();
-    p_out.y = out.y();
-    p_out.z = out.z();
-    p_out.intensity = p_in.intensity;
-  }
+  bool extractSurroundKeyFrames(const PointType &p);
 };
 } // namespace localization
 

@@ -3,6 +3,12 @@ surround_search_num: 50
 corner_leaf: 0.2
 surf_leaf: 0.4
 outlier_leaf: 0.4
-surround_keyposes_leaf: 0.3
+surround_keyposes_leaf: 0.5
 target_update_dist: 5.
+
 batch_size: 5
+huber_s_: 0.2
+max_iters_: 10
+func_tolerance_: 1e-8
+gradient_tolerance_: 1e-10
+param_tolerance_: 1e-8

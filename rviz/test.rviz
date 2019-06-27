@@ -5,9 +5,6 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
-        - /corner_target1
-        - /corner_target1/Status1
-        - /surf_source1/Status1
       Splitter Ratio: 0.5
     Tree Height: 773
   - Class: rviz/Selection
@@ -168,6 +165,40 @@ Visualization Manager:
           Use Fixed Frame: true
           Use rainbow: true
           Value: false
+        - Angle Tolerance: 0.100000001
+          Class: rviz/Odometry
+          Covariance:
+            Orientation:
+              Alpha: 0.5
+              Color: 255; 255; 127
+              Color Style: Unique
+              Frame: Local
+              Offset: 1
+              Scale: 1
+              Value: true
+            Position:
+              Alpha: 0.300000012
+              Color: 204; 51; 204
+              Scale: 1
+              Value: true
+            Value: true
+          Enabled: true
+          Keep: 2000
+          Name: /odom/lidar
+          Position Tolerance: 0.100000001
+          Shape:
+            Alpha: 1
+            Axes Length: 1
+            Axes Radius: 0.100000001
+            Color: 255; 25; 0
+            Head Length: 0.300000012
+            Head Radius: 0.100000001
+            Shaft Length: 1
+            Shaft Radius: 0.0500000007
+            Value: Axes
+          Topic: /odom/lidar
+          Unreliable: false
+          Value: true
       Enabled: true
       Name: LO
     - Alpha: 1
@@ -185,15 +216,15 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
-      Max Intensity: 690
+      Max Intensity: 595
       Min Color: 0; 0; 0
-      Min Intensity: 0
+      Min Intensity: 200
       Name: surf_target
       Position Transformer: XYZ
       Queue Size: 10
       Selectable: true
       Size (Pixels): 1
-      Size (m): 0.0199999996
+      Size (m): 0.0500000007
       Style: Flat Squares
       Topic: /surf_target
       Unreliable: false
@@ -215,15 +246,15 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
-      Max Intensity: 690
+      Max Intensity: 595
       Min Color: 0; 0; 0
-      Min Intensity: 0
+      Min Intensity: 200
       Name: corner_target
       Position Transformer: XYZ
       Queue Size: 10
       Selectable: true
       Size (Pixels): 3
-      Size (m): 0.0199999996
+      Size (m): 0.0500000007
       Style: Flat Squares
       Topic: /corner_target
       Unreliable: false
@@ -285,6 +316,36 @@ Visualization Manager:
       Channel Name: intensity
       Class: rviz/PointCloud2
       Color: 255; 255; 255
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: false
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 15.1799002
+      Min Color: 0; 0; 0
+      Min Intensity: 0.0346999988
+      Name: corner_source
+      Position Transformer: XYZ
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.150000006
+      Style: Flat Squares
+      Topic: /corner_source
+      Unreliable: false
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: false
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/PointCloud2
+      Color: 255; 255; 255
       Color Transformer: Intensity
       Decay Time: 0
       Enabled: true
@@ -330,25 +391,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 42.9635696
+      Distance: 330.388458
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.0599999987
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -1.54296696
-        Y: 12.2544737
-        Z: -3.1923306
+        X: -7.87622738
+        Y: -71.1387711
+        Z: -3.10893655
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.0500000007
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.00999999978
-      Pitch: 1.52979636
+      Pitch: 1.56979632
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 1.64531934
+      Yaw: 1.57070005
     Saved: ~
 Window Geometry:
   Displays:

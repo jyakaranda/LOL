@@ -6,11 +6,9 @@ Laser Odometry and Localization
 
 Add localization support for LOAM/LeGO-LOAM, referenced from `8.2.3 Localization and Map Merging` in [1].
 
-```
-Compared to the previous section, the difference is that the localization does not process individual scans but stacks a number of scans for batch processing. Thanks to the high-accuracy
+> Compared to the previous section, the difference is that the localization does not process individual scans but stacks a number of scans for batch processing. Thanks to the high-accuracy
 odometry estimation, scans are registered precisely in a local coordinate frame where drift is
 negligible over a short period of time (a few seconds).
-```
 
 Localization test(running at TX2) under point cloud map built by A-LeGO-LOAM[2].
 

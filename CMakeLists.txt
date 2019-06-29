@@ -15,6 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   sensor_msgs
   tf
+  pcl_conversions
   alego
 )
 

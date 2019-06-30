@@ -14,6 +14,10 @@ Localization test(running at TX2) under point cloud map built by A-LeGO-LOAM[2].
 
 ![lol](./img/lol_test0515.gif)
 
+Map bulit by lol using corner point cloud.
+
+![](./img/lol_map.png)
+
 ## Usage
 
 ### Input

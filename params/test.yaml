@@ -6,6 +6,7 @@ outlier_leaf: 0.4
 surround_keyposes_leaf: 0.5
 target_update_dist: 5.
 
+max_opt_iters: 4
 batch_size: 5
 huber_s_: 0.2
 max_iters_: 10

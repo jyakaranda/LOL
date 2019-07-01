@@ -27,6 +27,7 @@ LolLocalization::LolLocalization(ros::NodeHandle nh, ros::NodeHandle pnh) : nh_(
   pnh_.param<std::string>("fn_surf", fn_surf_, std::string("~"));
   pnh_.param<std::string>("fn_outlier", fn_outlier_, std::string("~"));
   pnh_.param<double>("target_update_dist", target_update_dist_, 5.);
+  pnh_.param<int>("max_opt_iters", max_opt_iters_, 4);
   pnh_.param<int>("batch_size", batch_size_, 5);
   pnh_.param<double>("huber_s", huber_s_, 0.2);
   pnh_.param<int>("max_iters", max_iters_, 10);
@@ -57,6 +58,7 @@ LolLocalization::LolLocalization(ros::NodeHandle nh, ros::NodeHandle pnh) : nh_(
   pub_corner_source_ = nh_.advertise<sensor_msgs::PointCloud2>("/corner_source", 1);
   pub_surf_source_ = nh_.advertise<sensor_msgs::PointCloud2>("/surf_source", 1);
   pub_test_ = nh_.advertise<sensor_msgs::PointCloud2>("/test_pc", 1);
+  pub_confidence_ = nh_.advertise<std_msgs::Float32>("/lol_confidence", 1);
 
   sub_odom_ = nh_.subscribe<nav_msgs::Odometry>("/odom/lidar", 40, boost::bind(&LolLocalization::odomCB, this, _1));
   sub_corner_ = nh_.subscribe<sensor_msgs::PointCloud2>("/corner", 10, boost::bind(&LolLocalization::cornerCB, this, _1));
@@ -158,6 +160,8 @@ bool LolLocalization::init()
     tobe_optimized_[i] = 0;
   }
 
+  lol_confidence_ = 80.;
+
   ROS_INFO("init ok. time: %.3fms", t_init.toc());
 
   return true;
@@ -197,6 +201,10 @@ void LolLocalization::odomCB(const nav_msgs::OdometryConstPtr &msg)
   msg_pose.pose.position.y = m2b(1, 3);
   msg_pose.pose.position.z = m2b(2, 3);
   pub_lol_pose_.publish(msg_pose);
+
+  std_msgs::Float32 msg_conf;
+  msg_conf.data = lol_confidence_;
+  pub_confidence_.publish(lol_confidence_);
 }
 
 void LolLocalization::cornerCB(const sensor_msgs::PointCloud2ConstPtr &msg)
@@ -498,7 +506,8 @@ void LolLocalization::optimizeThread()
     }
 
     // scan matching refinement
-    for (int iter_cnt = 0; iter_cnt < 4; ++iter_cnt)
+    int converge_cnt = 0;
+    for (int iter_cnt = 0; iter_cnt < max_opt_iters_; ++iter_cnt)
     {
       TicToc t_data, t_opt;
       ceres::Problem problem;
@@ -602,6 +611,10 @@ void LolLocalization::optimizeThread()
       ROS_INFO("localization solver time: %.3fms", t_solver.toc());
       std::cout << summary.BriefReport() << std::endl;
 
+      if (summary.termination_type == ceres::TerminationType::CONVERGENCE)
+      {
+        ++converge_cnt;
+      }
       // transformUpdate
       m2l_0_backup.block<3, 3>(0, 0) = (Eigen::AngleAxisd(tobe_optimized_[5], Eigen::Vector3d::UnitZ()) * Eigen::AngleAxisd(tobe_optimized_[4], Eigen::Vector3d::UnitY()) * Eigen::AngleAxisd(tobe_optimized_[3], Eigen::Vector3d::UnitX())).toRotationMatrix();
       m2l_0_backup(0, 3) = tobe_optimized_[0];
@@ -609,9 +622,25 @@ void LolLocalization::optimizeThread()
       m2l_0_backup(2, 3) = tobe_optimized_[2];
 
       tf_m2o_update_ = m2l_0_backup * o2l_o_backup.inverse();
-       std::cout << "iter: " << iter_cnt << " opt time: " << t_opt.toc() <<"ms" << std::endl;
+      std::cout << "iter: " << iter_cnt << " opt time: " << t_opt.toc() << "ms" << std::endl;
     }
 
+    float ratio = 1.0 * converge_cnt / max_opt_iters_;
+    if (lol_confidence_ < 60. && ratio > 0.5)
+    {
+      lol_confidence_ = 60.;
+    }
+    else if (lol_confidence_ >= 60.)
+    {
+      if (ratio > 0.5)
+      {
+        lol_confidence_ += (100. - lol_confidence_) * (ratio - 0.5);
+      }
+      else
+      {
+        lol_confidence_ -= 40 * (ratio - 0.5);
+      }
+    }
     ROS_INFO("overall optimize time: %.3fms", t_all.toc());
   }
 }

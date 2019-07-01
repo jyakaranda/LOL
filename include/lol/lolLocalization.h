@@ -30,6 +30,7 @@
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <tf/transform_listener.h>
 #include <tf/transform_broadcaster.h>
+#include <std_msgs/Float32.h>
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -83,9 +84,11 @@ private:
   ros::Publisher pub_corner_source_;
   ros::Publisher pub_surf_source_;
   ros::Publisher pub_test_;
+  ros::Publisher pub_confidence_;
   tf::TransformBroadcaster tf_broadcaster_;
 
   double tobe_optimized_[6];
+  float lol_confidence_;
 
   pcl::PointCloud<PointType>::Ptr laser_corner_;
   pcl::PointCloud<PointType>::Ptr laser_surf_;
@@ -143,7 +146,7 @@ private:
   std::string fn_poses_, fn_corner_, fn_surf_, fn_outlier_;
   double target_update_dist_; // 与 target_center_ 偏移 target_update_dist_ 以上时更新局部 target map
   int batch_size_;
-
+  int max_opt_iters_;
   double huber_s_;
   int max_iters_;
   double func_tolerance_;
